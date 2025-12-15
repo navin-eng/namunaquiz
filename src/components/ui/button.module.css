@@ -1,0 +1,78 @@
+.button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-md);
+    font-weight: 500;
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+    transition-property: color, background-color, border-color, transform;
+    transition-duration: 200ms;
+    border: 1px solid transparent;
+    outline: none;
+    cursor: pointer;
+    padding: 0.5rem 1rem;
+}
+
+.button:focus-visible {
+    box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--ring);
+}
+
+.button:active {
+    transform: scale(0.98);
+}
+
+.primary {
+    background-color: var(--primary);
+    color: white;
+}
+
+.primary:hover {
+    background-color: var(--primary-hover);
+}
+
+.secondary {
+    background-color: var(--secondary);
+    color: white;
+}
+
+.secondary:hover {
+    filter: brightness(1.1);
+}
+
+.outline {
+    background-color: transparent;
+    border-color: var(--border);
+    color: var(--foreground);
+}
+
+.outline:hover {
+    background-color: var(--surface-hover);
+}
+
+.ghost {
+    background-color: transparent;
+    color: var(--foreground);
+}
+
+.ghost:hover {
+    background-color: var(--surface-hover);
+}
+
+.destructive {
+    background-color: var(--red);
+    color: white;
+}
+
+.destructive:hover {
+    filter: brightness(0.9);
+}
+
+.lg {
+    padding: 0.75rem 1.5rem;
+    font-size: 1rem;
+}
+
+.full {
+    width: 100%;
+}
