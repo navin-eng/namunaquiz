@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils';
 
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
     variant?: 'primary' | 'secondary' | 'outline' | 'ghost' | 'destructive';
-    size?: 'default' | 'lg';
+    size?: 'default' | 'sm' | 'lg' | 'icon';
     fullWidth?: boolean;
 }
 
@@ -18,6 +18,8 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
                     styles.button,
                     styles[variant],
                     size === 'lg' && styles.lg,
+                    size === 'sm' && styles.sm,
+                    size === 'icon' && styles.icon,
                     fullWidth && styles.full,
                     className
                 )}

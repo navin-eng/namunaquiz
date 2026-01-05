@@ -1,32 +1,75 @@
-
 'use client'
 
-import React, { useState } from 'react'
-// import { v4 as uuidv4 } from 'uuid' // We can just use crypto.randomUUID for client side or trust simplified IDs
+import React, { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { QuestionForm } from '@/components/game/QuestionForm'
-import { Question, Option } from '@/lib/types'
-import { Save, Plus, FileJson, ArrowLeft } from 'lucide-react'
+import { Question } from '@/lib/types'
+import { Save, Plus, ArrowLeft, Loader2 } from 'lucide-react'
 import Link from 'next/link'
 
-export default function CreateQuizPage() {
+export default function EditQuizPage({ params }: { params: Promise<{ quizId: string }> }) {
+    const { quizId } = React.use(params)
     const router = useRouter()
     const [title, setTitle] = useState('')
     const [questions, setQuestions] = useState<Question[]>([])
+    const [loading, setLoading] = useState(true)
     const [saving, setSaving] = useState(false)
-    const [jsonMode, setJsonMode] = useState(false)
-    const [jsonInput, setJsonInput] = useState('')
+
+    useEffect(() => {
+        const fetchData = async () => {
+            try {
+                // 1. Fetch Quiz
+                const { data: quiz, error: quizError } = await supabase
+                    .from('quizzes')
+                    .select('*')
+                    .eq('id', quizId)
+                    .single()
+
+                if (quizError) throw quizError
+                setTitle(quiz.title)
+
+                // 2. Fetch Questions
+                const { data: qs, error: qsError } = await supabase
+                    .from('questions')
+                    .select('*')
+                    .eq('quiz_id', quizId)
+                    .order('order_index')
+
+                if (qsError) throw qsError
+
+                if (qs) {
+                    setQuestions(qs.map(q => ({
+                        id: q.id,
+                        question: q.question_text,
+                        timeLimit: q.time_limit,
+                        options: q.options
+                    })))
+                }
+            } catch (error) {
+                console.error('Error fetching quiz details:', error)
+                alert('Failed to load quiz')
+            } finally {
+                setLoading(false)
+            }
+        }
+        fetchData()
+    }, [quizId])
 
     const addQuestion = () => {
-        const defaultTime = parseInt(localStorage.getItem('quiz_default_time') || '20')
         const newQuestion: Question = {
-            id: crypto.randomUUID(),
+            id: crypto.randomUUID(), // Needs to be careful with UUIDs if we rely on DB generation, but for edit strictly it's tricky.
+            // Ideally we differentiate new vs existing by ID format or separate tracking. 
+            // For simplicity, we'll try to use UUIDs. If it's a new UUID not in DB, we'll need to know to insert it.
+            // Or we check if ID exists in fetched list.
+            // Actually, simpler approach for this MVP: Delete all questions and recreate them? 
+            // OR: Upsert. 
+            // Let's us upsert.
             question: '',
-            timeLimit: defaultTime,
+            timeLimit: 20,
             options: [
                 { id: crypto.randomUUID(), text: '', isCorrect: false },
                 { id: crypto.randomUUID(), text: '', isCorrect: false },
@@ -49,51 +92,44 @@ export default function CreateQuizPage() {
         setQuestions(newQuestions)
     }
 
-    const handleJsonImport = () => {
-        try {
-            const parsed = JSON.parse(jsonInput);
-            const defaultTime = parseInt(localStorage.getItem('quiz_default_time') || '20')
-
-            // Validate and map to our structure
-            const mappedQuestions: Question[] = parsed.map((q: any) => ({
-                id: crypto.randomUUID(),
-                question: q.question,
-                timeLimit: q.timeLimit || defaultTime,
-                options: q.options.map((o: any) => ({
-                    id: crypto.randomUUID(),
-                    text: o.text,
-                    isCorrect: o.isCorrect
-                }))
-            }));
-            setQuestions([...questions, ...mappedQuestions]);
-            setJsonMode(false);
-            setJsonInput('');
-        } catch (e) {
-            alert('Invalid JSON format');
-        }
-    }
-
     const handleSave = async () => {
         if (!title) return alert('Please enter a quiz title')
         if (questions.length === 0) return alert('Add at least one question')
 
         setSaving(true)
         try {
-            // 1. Create Quiz
-            const { data: quizData, error: quizError } = await supabase
+            // 1. Update Quiz Title
+            const { error: quizError } = await supabase
                 .from('quizzes')
-                .insert({ title, user_id: (await supabase.auth.getUser()).data.user?.id })
-                .select()
-                .single()
+                .update({ title })
+                .eq('id', quizId)
 
             if (quizError) throw quizError
 
-            // 2. Create Questions
+            // 2. Handle Questions (Upsert Strategy - simplified: Delete all for this quiz and re-insert is risky for history if played games link to questions directly, but questions table ID might be stable?)
+            // If we delete key matches, previous games stats might break if they link to question IDs.
+            // Review schema: Games link to Quiz. HostRunner fetches questions.
+            // HostRunner copies question options? No, it reads questions.
+            // If we delete questions, historic data might be confused if referencing specific question IDs (not implemented yet).
+            // Current schema doesn't link answers to specific Question IDs in a hard relational way for stats, just count.
+            // So "Delete All and Re-Insert" for this Quiz ID is cleanest for MVP to handle ordering/deletions/additions.
+
+            // DELETE existing questions
+            await supabase.from('questions').delete().eq('quiz_id', quizId)
+
+            // INSERT all current questions
+            // We use the ID from state if valid UUID, or let DB gen new one?
+            // Let's generate new ones or keep existing. If we delete, we can re-insert with same IDs if we keep them.
+            // But some might be new.
             const questionsPayload = questions.map((q, index) => ({
-                quiz_id: quizData.id,
+                // id: q.id, // Try to preserve ID if possible, but if we delete, we can re-insert with explicit ID? Yes if generic. 
+                // However if we delete, it might violate constraints?
+                // Questions table has NO foreign keys pointing TO it from other tables in current schema (GameSession links Quiz, Players link Session).
+                // So safe to delete.
+                quiz_id: quizId,
                 question_text: q.question,
                 time_limit: q.timeLimit,
-                options: q.options, // Stored as JSONB
+                options: q.options,
                 order_index: index
             }))
 
@@ -113,6 +149,10 @@ export default function CreateQuizPage() {
         }
     }
 
+    if (loading) {
+        return <div className="flex items-center justify-center min-h-screen text-slate-400 gap-2"><Loader2 className="animate-spin" /> Loading...</div>
+    }
+
     return (
         <div className="space-y-6 pb-24 max-w-4xl mx-auto">
             <div className="flex items-center gap-4 mb-8">
@@ -122,8 +162,8 @@ export default function CreateQuizPage() {
                     </Button>
                 </Link>
                 <div>
-                    <h1 className="text-3xl font-black text-foreground tracking-tight">Create New Quiz</h1>
-                    <p className="text-muted-foreground">Fill in the details below to create your quiz.</p>
+                    <h1 className="text-3xl font-black text-foreground tracking-tight">Edit Quiz</h1>
+                    <p className="text-muted-foreground">Update your quiz details and questions.</p>
                 </div>
             </div>
 
@@ -139,72 +179,9 @@ export default function CreateQuizPage() {
                 </CardContent>
             </Card>
 
-            <div className="flex justify-end gap-2 mb-4">
-                <Button variant="outline" onClick={() => setJsonMode(!jsonMode)} className="gap-2 border-border bg-card hover:bg-muted text-muted-foreground">
-                    <FileJson size={16} /> {jsonMode ? 'Close Import Tool' : 'Import Questions from JSON'}
-                </Button>
-            </div>
-
-            {jsonMode && (
-                <Card className="bg-muted/30 border-dashed border-2 border-border mb-8 animate-in slide-in-from-top-4">
-                    <CardHeader>
-                        <CardTitle className="flex items-center gap-2 text-foreground">
-                            <FileJson className="text-primary" />
-                            JSON Import
-                        </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div>
-                                <p className="text-sm font-medium text-muted-foreground mb-2">Paste JSON Data</p>
-                                <textarea
-                                    className="w-full h-64 bg-background border border-input rounded-md p-4 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/20 resize-none"
-                                    value={jsonInput}
-                                    onChange={e => setJsonInput(e.target.value)}
-                                    placeholder="Paste your JSON here..."
-                                />
-                            </div>
-                            <div>
-                                <p className="text-sm font-medium text-muted-foreground mb-2">Sample Format</p>
-                                <div className="relative bg-muted/50 rounded-lg border border-border overflow-hidden h-64 group">
-                                    <pre className="p-4 text-xs font-mono text-muted-foreground overflow-auto h-full language-json">
-                                        {`[
-  {
-    "question": "Question text?",
-    "timeLimit": 20,
-    "options": [
-      { "text": "A", "isCorrect": true },
-      { "text": "B", "isCorrect": false },
-      { "text": "C", "isCorrect": false },
-      { "text": "D", "isCorrect": false }
-    ]
-  }
-]`}
-                                    </pre>
-                                    <Button
-                                        size="sm"
-                                        variant="secondary"
-                                        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
-                                        onClick={() => {
-                                            navigator.clipboard.writeText(`[{"question": "Sample Question?","timeLimit": 20,"options": [{"text": "Correct Option", "isCorrect": true},{"text": "Wrong Option 1", "isCorrect": false},{"text": "Wrong Option 2", "isCorrect": false},{"text": "Wrong Option 3", "isCorrect": false}]}]`)
-                                            alert('Copied sample to clipboard!')
-                                        }}
-                                    >
-                                        Copy Sample
-                                    </Button>
-                                </div>
-                            </div>
-                        </div>
-                        <Button className="mt-4 w-full" onClick={handleJsonImport} disabled={!jsonInput}>
-                            Parse & Add Questions
-                        </Button>
-                    </CardContent>
-                </Card>
-            )}
-
             <div className="space-y-6">
                 {questions.map((q, i) => (
-                    <div key={q.id} className="animate-in slide-in-from-bottom-4 duration-500">
+                    <div key={q.id || i} className="animate-in slide-in-from-bottom-4 duration-500">
                         <QuestionForm
                             index={i}
                             question={q}
@@ -247,7 +224,7 @@ export default function CreateQuizPage() {
                             </>
                         ) : (
                             <>
-                                <Save size={20} /> Save Quiz
+                                <Save size={20} /> Save Changes
                             </>
                         )}
                     </Button>

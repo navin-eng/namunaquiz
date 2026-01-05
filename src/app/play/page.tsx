@@ -19,6 +19,12 @@ export default function JoinGamePage() {
         e.preventDefault()
         setLoading(true)
 
+        if (!pin) {
+            alert('Please enter a Game PIN')
+            setLoading(false)
+            return
+        }
+
         try {
             const { data: session, error: sessionError } = await supabase
                 .from('game_sessions')
@@ -38,11 +44,32 @@ export default function JoinGamePage() {
                 return
             }
 
+            // Check for duplicate name
+            let finalName = name
+            const { data: existingPlayer } = await supabase
+                .from('players')
+                .select('id')
+                .eq('game_session_id', session.id)
+                .eq('name', name)
+                .maybeSingle()
+
+            if (existingPlayer) {
+                const uniqueSuffix = Math.floor(1000 + Math.random() * 9000)
+                const suggestedName = `${name}#${uniqueSuffix}`
+                // Simple Alert for now, could be better UI
+                if (!confirm(`Name "${name}" is already taken. Join as "${suggestedName}" instead?`)) {
+                    setLoading(false)
+                    return
+                }
+                finalName = suggestedName
+                setName(finalName)
+            }
+
             const { data: player, error: playerError } = await supabase
                 .from('players')
                 .insert({
                     game_session_id: session.id,
-                    name: name,
+                    name: finalName,
                     score: 0
                 })
                 .select()
@@ -50,7 +77,8 @@ export default function JoinGamePage() {
 
             if (playerError) throw playerError
 
-            localStorage.setItem('playerId', player.id)
+            // Use sessionStorage for tab encapsulation
+            sessionStorage.setItem('playerId', player.id)
 
             router.push(`/play/${session.id}`)
         } catch (error) {
@@ -61,55 +89,51 @@ export default function JoinGamePage() {
     }
 
     return (
-        <div className="flex min-h-screen items-center justify-center p-4 bg-[#030014] overflow-hidden relative">
-            {/* Background */}
-            <div className="absolute inset-0">
-                <div className="absolute top-[-20%] right-[-20%] w-[600px] h-[600px] bg-indigo-600/20 rounded-full blur-[100px] animate-pulse"></div>
-                <div className="absolute bottom-[-20%] left-[-20%] w-[600px] h-[600px] bg-purple-600/20 rounded-full blur-[100px] animate-pulse" style={{ animationDelay: '1.5s' }}></div>
-            </div>
-
-            <div className="w-full max-w-sm flex flex-col items-center gap-8 relative z-10">
-                <div className="flex flex-col items-center gap-2">
-                    <div className="w-16 h-16 bg-gradient-to-tr from-white to-slate-300 rounded-2xl flex items-center justify-center shadow-[0_0_30px_rgba(255,255,255,0.2)] transform -rotate-12 mb-4">
-                        <span className="text-3xl">🚀</span>
+        <div className="flex min-h-screen items-center justify-center p-4 bg-background text-foreground transition-colors duration-500">
+            <div className="w-full max-w-md animate-in fade-in slide-in-from-bottom-4 duration-700">
+                {/* Header */}
+                <div className="text-center mb-8">
+                    <div className="w-16 h-16 bg-primary rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-xl shadow-primary/20 transform hover:scale-110 transition-transform">
+                        <span className="text-3xl">🎮</span>
                     </div>
-                    <h1 className="text-4xl font-black text-white tracking-tight">Join Game</h1>
-                    <p className="text-slate-400 text-center">Enter the PIN on the screen to join the fun.</p>
+                    <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight mb-3">Join Game</h1>
+                    <p className="text-muted-foreground font-medium">Enter the PIN to get started</p>
                 </div>
 
-                <Card className="w-full bg-white/5 border border-white/10 backdrop-blur-xl shadow-2xl">
-                    <CardContent className="pt-8 space-y-6">
-                        <form onSubmit={handleJoin} className="space-y-4">
-                            <div className="space-y-2">
-                                <Input
-                                    placeholder="Game PIN"
-                                    className="text-center text-2xl font-black h-16 uppercase bg-black/40 border-white/10 focus:border-indigo-500 focus:ring-indigo-500 text-white placeholder:text-slate-600 tracking-widest"
-                                    value={pin}
-                                    onChange={e => setPin(e.target.value)}
-                                    required
-                                    maxLength={6}
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Input
-                                    placeholder="Nickname"
-                                    className="text-center text-xl font-bold h-14 bg-black/40 border-white/10 focus:border-purple-500 text-white placeholder:text-slate-600"
-                                    value={name}
-                                    onChange={e => setName(e.target.value)}
-                                    required
-                                />
-                            </div>
-                            <Button
-                                type="submit"
-                                className="w-full h-14 text-xl font-bold bg-white text-black hover:bg-slate-200 mt-4 rounded-xl shadow-[0_0_20px_rgba(255,255,255,0.2)] transition-all hover:scale-[1.02]"
-                                disabled={loading}
-                            >
-                                {loading ? 'Joining...' : 'Enter Game'}
-                                {!loading && <ArrowRight className="ml-2 w-5 h-5" />}
-                            </Button>
-                        </form>
-                    </CardContent>
-                </Card>
+                {/* Form Card */}
+                <div className="bg-card border border-border rounded-3xl p-6 sm:p-8 shadow-xl">
+                    <form onSubmit={handleJoin} className="space-y-6">
+                        <div className="space-y-2">
+                            <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider ml-1">Game PIN</label>
+                            <Input
+                                placeholder="000 000"
+                                className="text-center text-3xl font-black h-16 bg-muted/50 border-border focus:border-primary focus:ring-primary/20 text-foreground placeholder:text-muted-foreground/30 tracking-[0.2em] rounded-xl transition-all"
+                                value={pin}
+                                onChange={e => setPin(e.target.value.toUpperCase())}
+                                required
+                                maxLength={6}
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider ml-1">Your Name</label>
+                            <Input
+                                placeholder="Enter your nickname"
+                                className="text-lg h-14 bg-muted/50 border-border focus:border-primary focus:ring-primary/20 text-foreground placeholder:text-muted-foreground/50 rounded-xl font-medium transition-all"
+                                value={name}
+                                onChange={e => setName(e.target.value)}
+                                required
+                            />
+                        </div>
+                        <Button
+                            type="submit"
+                            className="w-full h-14 text-lg font-bold bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl shadow-lg shadow-primary/25 transition-all hover:-translate-y-0.5"
+                            disabled={loading}
+                        >
+                            {loading ? 'Joining...' : 'Enter Game'}
+                            {!loading && <ArrowRight className="ml-2 w-5 h-5" />}
+                        </Button>
+                    </form>
+                </div>
             </div>
         </div>
     )

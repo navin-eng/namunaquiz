@@ -14,9 +14,9 @@
     display: flex;
     height: 2.5rem;
     width: 100%;
-    border-radius: var(--radius-md);
+    border-radius: var(--radius);
     border: 1px solid var(--border);
-    background-color: var(--surface);
+    background-color: var(--background);
     padding: 0.5rem 0.75rem;
     font-size: 0.875rem;
     color: var(--foreground);

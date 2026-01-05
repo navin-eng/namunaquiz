@@ -1,10 +1,13 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { Toaster } from 'sonner';
 
 export const metadata: Metadata = {
   title: "QuizMaster",
   description: "Interactive Quiz System",
 };
+
+import { ThemeProvider } from '@/components/ThemeProvider';
 
 export default function RootLayout({
   children,
@@ -12,9 +15,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body className="antialiased">
-        {children}
+        <ThemeProvider>
+          {children}
+        </ThemeProvider>
+        <Toaster closeButton />
       </body>
     </html>
   );

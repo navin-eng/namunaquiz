@@ -73,6 +73,20 @@
     font-size: 1rem;
 }
 
+.sm {
+    padding: 0.25rem 0.75rem;
+    font-size: 0.75rem;
+}
+
+.icon {
+    padding: 0.5rem;
+    width: 2.5rem;
+    height: 2.5rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
 .full {
     width: 100%;
 }
